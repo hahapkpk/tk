@@ -10,7 +10,9 @@
 // @grant        GM_setValue
 // @grant        GM_info
 // @connect      raw.githubusercontent.com
-// @require      https://raw.githubusercontent.com/cf/tk/main/modules/logger.js
+// @connect      github.com
+// @require      https://raw.githubusercontent.com/hahapkpk/tk/main/modules/logger.js
+// @require      https://raw.githubusercontent.com/hahapkpk/tk/main/modules/demo.js
 // ==/UserScript==
 
 (function() {
@@ -23,6 +25,7 @@
         constructor() {
             this.modules = new Map();
             this.hooks = new Map();
+            this.initialized = false;
         }
 
         /**
@@ -32,10 +35,37 @@
          */
         register(name, module) {
             if (this.modules.has(name)) {
-                logger.warn(`模块 ${name} 已存在，将被覆盖`);
+                console.warn(`模块 ${name} 已存在，将被覆盖`);
             }
             this.modules.set(name, module);
-            logger.info(`模块 ${name} 注册成功`);
+            console.info(`模块 ${name} 注册成功`);
+
+            // 如果框架已经初始化，立即初始化新模块
+            if (this.initialized && module.init) {
+                try {
+                    module.init();
+                    console.info(`模块 ${name} 初始化成功`);
+                } catch (error) {
+                    console.error(`模块 ${name} 初始化失败:`, error);
+                }
+            }
+        }
+
+        /**
+         * 初始化所有模块
+         */
+        initializeModules() {
+            this.initialized = true;
+            this.modules.forEach((module, name) => {
+                if (module.init) {
+                    try {
+                        module.init();
+                        console.info(`模块 ${name} 初始化成功`);
+                    } catch (error) {
+                        console.error(`模块 ${name} 初始化失败:`, error);
+                    }
+                }
+            });
         }
 
         /**
@@ -61,7 +91,7 @@
          */
         remove(name) {
             if (this.modules.delete(name)) {
-                logger.info(`模块 ${name} 已移除`);
+                console.info(`模块 ${name} 已移除`);
             }
         }
 
@@ -76,7 +106,7 @@
                     try {
                         callback(data);
                     } catch (error) {
-                        logger.error(`执行钩子 ${hookName} 时出错: ${error.message}`);
+                        console.error(`执行钩子 ${hookName} 时出错: ${error.message}`);
                     }
                 });
             }
@@ -184,10 +214,15 @@
          */
         async init() {
             try {
-                logger.info(`TK框架 v${this.version} 初始化中...`);
+                console.info(`TK框架 v${this.version} 初始化中...`);
                 
                 // 注册内置模块
-                this.moduleManager.register('logger', logger);
+                if (typeof logger !== 'undefined') {
+                    this.moduleManager.register('logger', logger);
+                }
+                
+                // 初始化所有已注册模块
+                this.moduleManager.initializeModules();
                 
                 // 触发初始化完成钩子
                 this.moduleManager.triggerHook('init', {
@@ -195,21 +230,21 @@
                     modules: this.moduleManager.list()
                 });
 
-                logger.info('框架初始化完成！');
+                console.info('框架初始化完成！');
             } catch (error) {
-                logger.error(`框架初始化失败: ${error.message}`);
+                console.error(`框架初始化失败: ${error.message}`);
             }
         }
     }
 
-    // 创建并初始化框架实例
+    // 创建框架实例
     const framework = new Framework();
     
-    // 页面加载完成后执行初始化
-    if (document.readyState === 'complete') {
-        framework.init();
+    // 确保在 DOM 加载完成后初始化
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => framework.init());
     } else {
-        window.addEventListener('load', () => framework.init());
+        framework.init();
     }
 
     // 导出框架实例到全局作用域
